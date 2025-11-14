@@ -22,6 +22,9 @@ var establishing_feed := false
 const LOST_FRAME_TIMEOUT := 5.0
 const RECONNECT_COOLDOWN := 10.0
 
+# NEW FLAG — prevents multiple scans
+var webcam_scanned := false
+
 
 func _ready() -> void:
 	debug_label.text = "📷 Initializing camera system...\n"
@@ -34,14 +37,19 @@ func _ready() -> void:
 
 
 # --------------------------------------------------------------------
-# FEED DISCOVERY
+# FEED DISCOVERY (only runs once)
 # --------------------------------------------------------------------
 func _on_camera_feeds_updated() -> void:
+	if webcam_scanned:
+		return  # 🚫 Prevent rescan
+
 	var feeds := CameraServer.feeds()
 
 	if feeds.is_empty():
 		_log("❌ No camera feeds detected.")
 		return
+
+	webcam_scanned = true  # ✅ Mark scan as done forever
 
 	_log("📋 Available feeds:")
 	for i in feeds.size():
@@ -56,16 +64,17 @@ func _on_camera_feeds_updated() -> void:
 func _select_webcam(feeds: Array) -> void:
 	feed = null
 
-	if look_for_webcams.size() > 0:
-		var wanted := look_for_webcams.map(func(x): return x.to_lower())
-		for f in feeds:
-			var fname :String= f.get_name().to_lower()
-			for w in wanted:
-				if w in fname:
-					feed = f
-					_log("🎯 Found matching webcam '%s' (%s)" % [w, f.get_name()])
-					break
-			if feed:
+	if look_for_webcams.size() == 0:
+		return
+
+	for text in look_for_webcams:
+		var search = text.to_lower()
+		for webcam_feed in feeds:
+			var feed_name = webcam_feed.get_name().to_lower()
+			if feed_name.contains(search):
+				feed = webcam_feed
+				_log("🎯 Found matching webcam '%s' (%s)" %
+					[text, webcam_feed.get_name()])
 				break
 
 	if feed == null:
@@ -107,10 +116,10 @@ func _select_format() -> void:
 				target_index = i
 				_log("🎯 Found matching format '%s' → index %d" % [w, i])
 				break
+
 		if target_index != -1:
 			break
 
-	# fallback
 	if target_index == -1:
 		target_index = clamp(camera_format_index_if_not_found, 0, formats.size() - 1)
 		_log("🎯 Using fallback format index %d" % target_index)
@@ -125,7 +134,7 @@ func _select_format() -> void:
 
 
 # --------------------------------------------------------------------
-# ACTIVATE FEED (SAFE)
+# ACTIVATE FEED
 # --------------------------------------------------------------------
 func _activate_feed() -> void:
 	_log("⚡ Activating feed...")
@@ -133,7 +142,6 @@ func _activate_feed() -> void:
 
 	feed.set_active(true)
 
-	# Allow backend to start
 	await get_tree().process_frame
 	await get_tree().process_frame
 
@@ -168,15 +176,14 @@ func _on_active_changed(active: bool) -> void:
 
 	_log("✅ Feed active.")
 
-	# CREATE TEXTURE AND BIND TO FEED
 	cam_tex = CameraTexture.new()
-	cam_tex.camera_feed_id = feed.get_id()       # REQUIRED FIX
+	cam_tex.camera_feed_id = feed.get_id()
 
 	connected = true
 	lost_frames_timer = 0.0
 
 	if preview_rect:
-		preview_rect.texture = cam_tex   # MUST BE DRAWN FOR SOME BACKENDS
+		preview_rect.texture = cam_tex
 
 	_log("🎥 CameraTexture created and bound to feed.")
 	on_webcam_texture_created.emit(cam_tex)
@@ -214,7 +221,7 @@ func _process(delta: float) -> void:
 func _refresh_feed() -> void:
 	if not feed:
 		_log("⚠️ No feed — rescanning.")
-		_on_camera_feeds_updated()
+		# BUT STILL DO NOT RESCAN webcams — user requested only one scan
 		return
 
 	_log("♻️ Refreshing feed...")
