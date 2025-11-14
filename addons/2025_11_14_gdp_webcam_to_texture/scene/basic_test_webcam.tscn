@@ -7,27 +7,38 @@
 
 [node name="Control" type="Control" parent="." node_paths=PackedStringArray("debug_label", "preview_rect")]
 layout_mode = 3
-anchors_preset = 0
-offset_right = 40.0
-offset_bottom = 40.0
+anchor_right = 0.994
+anchor_bottom = 1.0
+offset_right = -0.16003418
+offset_bottom = -6.0
 script = ExtResource("1_uriqm")
 debug_label = NodePath("Label")
-preview_rect = NodePath("TextureRect")
+preview_rect = NodePath("VBoxContainer/TextureRect")
 look_for_webcams = Array[String](["USB Composite", "MiraBox"])
-camera_index_if_not_found = null
 look_for_format = Array[String](["1280x720"])
-camera_format_index_if_not_found = null
-
-[node name="TextureRect" type="TextureRect" parent="Control" node_paths=PackedStringArray("to_affect")]
-layout_mode = 0
-offset_right = 40.0
-offset_bottom = 40.0
-script = ExtResource("2_hba0e")
-to_affect = NodePath(".")
 
 [node name="Label" type="Label" parent="Control"]
 layout_mode = 0
 offset_right = 40.0
 offset_bottom = 23.0
 
-[connection signal="on_webcam_texture_created" from="Control" to="Control/TextureRect" method="set_texture_with_camera_texture"]
+[node name="VBoxContainer" type="VBoxContainer" parent="Control"]
+layout_mode = 1
+anchors_preset = -1
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_right = 2.0
+
+[node name="TextureRect" type="TextureRect" parent="Control/VBoxContainer" node_paths=PackedStringArray("to_affect")]
+layout_mode = 2
+expand_mode = 5
+script = ExtResource("2_hba0e")
+to_affect = NodePath(".")
+texture_width = 1280
+texture_height = 720
+
+[node name="TextureRect2" type="TextureRect" parent="Control/VBoxContainer"]
+layout_mode = 2
+expand_mode = 2
+
+[connection signal="on_webcam_texture_created" from="Control" to="Control/VBoxContainer/TextureRect" method="set_texture_with_camera_texture"]
