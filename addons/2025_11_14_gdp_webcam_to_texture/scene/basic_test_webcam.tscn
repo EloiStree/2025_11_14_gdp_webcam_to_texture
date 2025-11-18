@@ -1,7 +1,11 @@
-[gd_scene load_steps=3 format=3 uid="uid://dd14mri16y7ks"]
+[gd_scene load_steps=5 format=3 uid="uid://dd14mri16y7ks"]
 
 [ext_resource type="Script" uid="uid://x1yqox88ych1" path="res://addons/2025_11_14_gdp_webcam_to_texture/script/listen_to_webcam.gd" id="1_uriqm"]
 [ext_resource type="Script" uid="uid://du2nyh816x47d" path="res://addons/2025_11_14_gdp_webcam_to_texture/script/camera_texture_to_texture_rect.gd" id="2_hba0e"]
+[ext_resource type="Shader" uid="uid://fysg3hdtxonx" path="res://addons/2025_11_14_gdp_webcam_to_texture/shader/grey_blue_test.gdshader" id="2_np0tg"]
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_s2c83"]
+shader = ExtResource("2_np0tg")
 
 [node name="Node3D" type="Node3D"]
 
@@ -30,6 +34,7 @@ anchor_bottom = 1.0
 offset_right = 2.0
 
 [node name="TextureRect" type="TextureRect" parent="Control/VBoxContainer" node_paths=PackedStringArray("to_affect")]
+material = SubResource("ShaderMaterial_s2c83")
 layout_mode = 2
 expand_mode = 5
 script = ExtResource("2_hba0e")
