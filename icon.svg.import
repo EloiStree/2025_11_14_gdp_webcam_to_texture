@@ -3,15 +3,15 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://c7qpwcw20nstj"
-path="res://.godot/imported/icon.svg-218a8f2b3041327d8a5756f3a245f83b.ctex"
+path="res://.godot/imported/icon.svg-b8dd82ae6fff625a80c56d3a74b1be73.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://icon.svg"
-dest_files=["res://.godot/imported/icon.svg-218a8f2b3041327d8a5756f3a245f83b.ctex"]
+source_file="res://addons/2025_11_14_gdp_webcam_to_texture/icon.svg"
+dest_files=["res://.godot/imported/icon.svg-b8dd82ae6fff625a80c56d3a74b1be73.ctex"]
 
 [params]
 
