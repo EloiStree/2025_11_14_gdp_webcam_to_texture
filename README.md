@@ -1,4 +1,9 @@
 
+```
+git submodule add https://github.com/EloiStree/2025_11_14_gdp_webcam_to_texture.git addons/2025_11_14_gdp_webcam_to_texture
+git submodule update --init --recursive
+```
+
 
 # 2025_11_14_gdp_webcam_to_texture
 
