@@ -1,249 +1,364 @@
+
 class_name ListenToWebcam
 extends Node
 
 signal on_webcam_texture_created(webcam: CameraTexture)
 
-@export var debug_label: Label
+@export_category("UI")
+@export var webcam_option_button: OptionButton
 @export var preview_rect: TextureRect
-@export var look_for_webcams : Array[String]
-@export var camera_index_if_not_found := 0
+@export var debug_label: Label
 
-@export var look_for_format : Array[String] = ["1280x720 yuyv", "1280x720 mjpeg"]
-@export var camera_format_index_if_not_found := 0
+@export_category("Webcam Selection")
+@export var look_for_webcams: Array[String] = []
+@export var camera_index_if_not_found: int = 0
 
+@export_category("Camera Format")
+@export var look_for_format: Array[String] = [
+	"1280x720 yuyv",
+	"1280x720 mjpeg"
+]
+@export var camera_format_index_if_not_found: int = 0
+
+var feeds: Array[CameraFeed] = []
 var feed: CameraFeed
 var cam_tex: CameraTexture
 
 var connected := false
-var lost_frames_timer := 0.0
-var last_reconnect_time := 0
-var establishing_feed := false
-
-const LOST_FRAME_TIMEOUT := 5.0
-const RECONNECT_COOLDOWN := 10.0
-
-# NEW FLAG — prevents multiple scans
-var webcam_scanned := false
 
 
 func _ready() -> void:
-	debug_label.text = "📷 Initializing camera system...\n"
+	_log("📷 Initializing camera system...")
 
-	CameraServer.camera_feeds_updated.connect(_on_camera_feeds_updated)
+	# React when cameras are added/removed.
+	if not CameraServer.camera_feeds_updated.is_connected(_on_camera_feeds_updated):
+		CameraServer.camera_feeds_updated.connect(_on_camera_feeds_updated)
+
 	CameraServer.monitoring_feeds = true
 
-	_log("🔍 Searching for available camera feeds...")
+	if webcam_option_button:
+		if not webcam_option_button.item_selected.is_connected(_on_webcam_selected):
+			webcam_option_button.item_selected.connect(_on_webcam_selected)
+
+	# Scan once initially.
 	_on_camera_feeds_updated()
 
 
-# --------------------------------------------------------------------
-# FEED DISCOVERY (only runs once)
-# --------------------------------------------------------------------
-func _on_camera_feeds_updated() -> void:
-	if webcam_scanned:
-		return  # 🚫 Prevent rescan
+# ================================================================
+# WEBCAM DISCOVERY
+# ================================================================
 
-	var feeds := CameraServer.feeds()
+func _on_camera_feeds_updated() -> void:
+	feeds = CameraServer.feeds()
+
+	_log("")
 
 	if feeds.is_empty():
-		_log("❌ No camera feeds detected.")
+		_log("❌ No webcams detected.")
+
+		if webcam_option_button:
+			webcam_option_button.clear()
+			webcam_option_button.add_item("No webcams detected")
+			webcam_option_button.disabled = true
+
 		return
 
-	webcam_scanned = true  # ✅ Mark scan as done forever
+	_log("📋 Available webcams:")
 
-	_log("📋 Available feeds:")
+	if webcam_option_button:
+		webcam_option_button.clear()
+		webcam_option_button.disabled = false
+
 	for i in feeds.size():
-		_log("   • [%d] %s" % [i, feeds[i].get_name()])
+		var webcam: CameraFeed = feeds[i]
 
-	_select_webcam(feeds)
+		var name := webcam.get_name()
+		var id := webcam.get_id()
+
+		_log("[%d] %s   ID: %d" % [i, name, id])
+
+		if webcam_option_button:
+			webcam_option_button.add_item(name, id)
+
+		# Also print available formats.
+		_print_camera_formats(webcam)
+
+	_log("")
+
+	# Select the preferred webcam.
+	var selected_index := _find_preferred_webcam()
+
+	if selected_index >= 0:
+		_select_webcam(selected_index)
 
 
-# --------------------------------------------------------------------
-# SELECT CAMERA
-# --------------------------------------------------------------------
-func _select_webcam(feeds: Array) -> void:
-	feed = null
+# ================================================================
+# PRINT CAMERA INFORMATION
+# ================================================================
 
-	if look_for_webcams.size() == 0:
+func _print_camera_formats(webcam: CameraFeed) -> void:
+	var formats := webcam.get_formats()
+
+	if formats.is_empty():
+		_log("    No formats reported.")
 		return
 
-	for text in look_for_webcams:
-		var search = text.to_lower()
-		for webcam_feed in feeds:
-			var feed_name = webcam_feed.get_name().to_lower()
-			if feed_name.contains(search):
-				feed = webcam_feed
-				_log("🎯 Found matching webcam '%s' (%s)" %
-					[text, webcam_feed.get_name()])
-				break
+	for i in formats.size():
+		var format: Dictionary = formats[i]
 
-	if feed == null:
-		var idx := clamp(camera_index_if_not_found, 0, feeds.size() - 1)
-		feed = feeds[idx]
-		_log("🎯 Using fallback webcam index %d → %s" % [idx, feed.get_name()])
+		var width: int = format.get("width", 0)
+		var height: int = format.get("height", 0)
+		var format_name := String(format.get("format", ""))
+
+		_log(
+			"    Format [%d]: %dx%d %s"
+			% [i, width, height, format_name]
+		)
+
+
+# ================================================================
+# FIND PREFERRED WEBCAM
+# ================================================================
+
+func _find_preferred_webcam() -> int:
+	# If no names were specified, use the fallback index.
+	if look_for_webcams.is_empty():
+		return clampi(
+			camera_index_if_not_found,
+			0,
+			feeds.size() - 1
+		)
+
+	# Search by name.
+	for wanted_name in look_for_webcams:
+		var search := wanted_name.to_lower()
+
+		for i in feeds.size():
+			var webcam_name := feeds[i].get_name().to_lower()
+
+			if webcam_name.contains(search):
+				_log(
+					"🎯 Found webcam '%s' → [%d] %s"
+					% [
+						wanted_name,
+						i,
+						feeds[i].get_name()
+					]
+				)
+
+				return i
+
+	# Nothing matched.
+	var fallback := clampi(
+		camera_index_if_not_found,
+		0,
+		feeds.size() - 1
+	)
+
+	_log(
+		"⚠️ No matching webcam found."
+	)
+
+	_log(
+		"🎯 Using fallback [%d] %s"
+		% [
+			fallback,
+			feeds[fallback].get_name()
+		]
+	)
+
+	return fallback
+
+
+# ================================================================
+# SELECT WEBCAM FROM UI
+# ================================================================
+
+func _on_webcam_selected(index: int) -> void:
+	if index < 0 or index >= feeds.size():
+		return
+
+	_select_webcam(index)
+
+
+func _select_webcam(index: int) -> void:
+	if index < 0 or index >= feeds.size():
+		return
+
+	# Stop previous feed.
+	if feed and feed.is_active():
+		feed.set_active(false)
+
+	connected = false
+	cam_tex = null
+
+	feed = feeds[index]
+
+	_log(
+		"🎥 Selecting webcam [%d]: %s"
+		% [
+			index,
+			feed.get_name()
+		]
+	)
 
 	_select_format()
 
 
-# --------------------------------------------------------------------
-# SELECT FORMAT
-# --------------------------------------------------------------------
+# ================================================================
+# SELECT CAMERA FORMAT
+# ================================================================
+
 func _select_format() -> void:
+	if feed == null:
+		return
+
 	var formats := feed.get_formats()
 
 	if formats.is_empty():
-		_log("❌ No available formats.")
+		_log("⚠️ Camera has no reported formats.")
+		_activate_feed()
 		return
 
-	_log("📋 Available formats:")
-	for i in formats.size():
-		var f = formats[i]
-		_log("   • [%d] %dx%d %s" % [
-			i, f.get("width"), f.get("height"), f.get("format")
-		])
-
 	var target_index := -1
-	var wanted := look_for_format.map(func(s): return s.to_lower())
 
+	# Convert desired formats to lowercase.
+	var wanted_formats: Array[String] = []
+
+	for format_name in look_for_format:
+		wanted_formats.append(format_name.to_lower())
+
+	# Find matching format.
 	for i in formats.size():
-		var f: Dictionary = formats[i]
-		var pattern := "%dx%d %s" % [
-			f["width"], f["height"], String(f["format"]).to_lower()
+		var format: Dictionary = formats[i]
+
+		var width: int = format.get("width", 0)
+		var height: int = format.get("height", 0)
+		var format_name := String(
+			format.get("format", "")
+		).to_lower()
+
+		var description := "%dx%d %s" % [
+			width,
+			height,
+			format_name
 		]
 
-		for w in wanted:
-			if w in pattern:
+		for wanted in wanted_formats:
+			if wanted in description:
 				target_index = i
-				_log("🎯 Found matching format '%s' → index %d" % [w, i])
+
+				_log(
+					"🎯 Selected format [%d]: %s"
+					% [
+						i,
+						description
+					]
+				)
+
 				break
 
 		if target_index != -1:
 			break
 
+	# Fallback format.
 	if target_index == -1:
-		target_index = clamp(camera_format_index_if_not_found, 0, formats.size() - 1)
-		_log("🎯 Using fallback format index %d" % target_index)
+		target_index = clampi(
+			camera_format_index_if_not_found,
+			0,
+			formats.size() - 1
+		)
 
-	var ok := feed.set_format(target_index, {})
-	if ok:
-		_log("✅ Format applied.")
+		_log(
+			"🎯 Using fallback format [%d]"
+			% target_index
+		)
+
+	var result := feed.set_format(
+		target_index,
+		{}
+	)
+
+	if result:
+		_log("✅ Camera format applied.")
 	else:
-		_log("⚠️ Driver fallback triggered (format may differ).")
+		_log("⚠️ Camera rejected requested format. Driver fallback may be used.")
 
 	_activate_feed()
 
 
-# --------------------------------------------------------------------
-# ACTIVATE FEED
-# --------------------------------------------------------------------
+# ================================================================
+# ACTIVATE CAMERA
+# ================================================================
+
 func _activate_feed() -> void:
-	_log("⚡ Activating feed...")
-	establishing_feed = true
+	if feed == null:
+		return
+
+	_log(
+		"⚡ Activating: %s"
+		% feed.get_name()
+	)
 
 	feed.set_active(true)
 
 	await get_tree().process_frame
 	await get_tree().process_frame
-
-	establishing_feed = false
 
 	if not feed.is_active():
-		_log("❌ Feed failed to activate.")
+		_log("❌ Failed to activate webcam.")
 		connected = false
 		return
 
-	_log("✅ Feed activated.")
+	_log("✅ Webcam activated.")
 
 	cam_tex = CameraTexture.new()
 	cam_tex.camera_feed_id = feed.get_id()
 
 	connected = true
-	lost_frames_timer = 0
 
 	if preview_rect:
 		preview_rect.texture = cam_tex
 
 	on_webcam_texture_created.emit(cam_tex)
 
+	_log(
+		"📺 CameraTexture connected to preview."
+	)
 
-func _on_active_changed(active: bool) -> void:
-	establishing_feed = false
 
-	if not active:
-		_log("❌ Feed failed to activate.")
-		connected = false
+# ================================================================
+# PROCESS
+# ================================================================
+
+func _process(_delta: float) -> void:
+	if not connected:
 		return
 
-	_log("✅ Feed active.")
-
-	cam_tex = CameraTexture.new()
-	cam_tex.camera_feed_id = feed.get_id()
-
-	connected = true
-	lost_frames_timer = 0.0
-
-	if preview_rect:
-		preview_rect.texture = cam_tex
-
-	_log("🎥 CameraTexture created and bound to feed.")
-	on_webcam_texture_created.emit(cam_tex)
-
-
-# --------------------------------------------------------------------
-# PROCESS LOOP
-# --------------------------------------------------------------------
-func _process(delta: float) -> void:
-	if establishing_feed:
-		debug_label.text = "⏳ Establishing feed..."
+	if cam_tex == null:
 		return
 
-	if connected and cam_tex:
-		var w := cam_tex.get_width()
-		var h := cam_tex.get_height()
+	var width := cam_tex.get_width()
+	var height := cam_tex.get_height()
 
-		if w > 32 and h > 32:
-			lost_frames_timer = 0.0
-			debug_label.text = "✅ Receiving frames: %dx%d" % [w, h]
-		else:
-			lost_frames_timer += delta
-			debug_label.text = "⏳ Waiting for frames... %.1fs" % lost_frames_timer
-
-			if lost_frames_timer > LOST_FRAME_TIMEOUT:
-				if Time.get_ticks_msec() - last_reconnect_time > RECONNECT_COOLDOWN * 1000:
-					last_reconnect_time = Time.get_ticks_msec()
-					_log("⚠️ No frames detected — refreshing feed...")
-					await _refresh_feed()
+	if width > 32 and height > 32:
+		if debug_label:
+			debug_label.text = (
+				"Connected: %s\n"
+				+ "Resolution: %dx%d"
+			) % [
+				feed.get_name(),
+				width,
+				height
+			]
 
 
-# --------------------------------------------------------------------
-# REFRESH FEED
-# --------------------------------------------------------------------
-func _refresh_feed() -> void:
-	if not feed:
-		_log("⚠️ No feed — rescanning.")
-		# BUT STILL DO NOT RESCAN webcams — user requested only one scan
-		return
-
-	_log("♻️ Refreshing feed...")
-	establishing_feed = true
-
-	feed.active_changed.connect(func(active):
-		establishing_feed = false
-		if active:
-			_log("✅ Feed reactivated.")
-		else:
-			_log("❌ Feed reactivation failed.")
-	, CONNECT_ONE_SHOT)
-
-	feed.set_active(false)
-	await get_tree().process_frame
-	feed.set_active(true)
-
-
-# --------------------------------------------------------------------
+# ================================================================
 # LOGGING
-# --------------------------------------------------------------------
-func _log(msg: String) -> void:
-	print(msg)
+# ================================================================
+
+func _log(message: String) -> void:
+	print(message)
+
 	if debug_label:
-		debug_label.text += msg + "\n"
+		debug_label.text += message + "\n"
