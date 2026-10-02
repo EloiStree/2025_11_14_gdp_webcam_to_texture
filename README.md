@@ -26,3 +26,8 @@ But rest assured: I use all of this actively in my workshops.
 
 This tool does **not** handle `CameraTexture` directly—another package takes care of that.
 Its purpose is simply to provide scripts that pull webcam image data so it can be proc
+
+
+Question for future me:
+- Can I use virtual webcam to send the OBS Output to Godot on Steam OS?
+  - https://obsproject.com/kb/virtual-camera-guide 
