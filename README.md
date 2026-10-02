@@ -31,3 +31,6 @@ Its purpose is simply to provide scripts that pull webcam image data so it can b
 Question for future me:
 - Can I use virtual webcam to send the OBS Output to Godot on Steam OS?
   - https://obsproject.com/kb/virtual-camera-guide 
+https://interfacinglinux.com/2024/01/09/obs-virtual-webcam-on-linux/
+sudo steamos-readonly disable
+sudo pacman -S linux-headers v4l2loopback-dkms
